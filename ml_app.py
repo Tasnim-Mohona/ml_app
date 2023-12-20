@@ -7,7 +7,13 @@ import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
 
-
+import streamlit as st
+import pandas as pd
+from sklearn.linear_model import Lasso, LassoCV, Ridge, RidgeCV
+from sklearn.cross_decomposition import PLSRegression
+from sklearn.impute import SimpleImputer
+from sklearn.preprocessing import KBinsDiscretizer
+from sklearn.feature_selection import mutual_info_classif
 from sklearn.linear_model import Lasso, Ridge
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.feature_selection import mutual_info_classif
@@ -42,7 +48,6 @@ st.set_page_config(layout="wide")
 
 class DataPreprocessing:
     def __init__(self, df_or_path):
-        # Check if df_or_path is a DataFrame or a file path
         if isinstance(df_or_path, pd.DataFrame):
             self.df = df_or_path
         elif isinstance(df_or_path, str):
@@ -55,36 +60,35 @@ class DataPreprocessing:
         y = self.df.iloc[:, -1]
         return x, y
 
-    def split(self, x, y):
-        stratified_splitter = StratifiedShuffleSplit(n_splits=1, test_size=(100-split_size)/100, random_state=42)
-        # Use the splitter to get the train and test indices
+    def split(self, x, y, split_size=80):
+        stratified_splitter = StratifiedShuffleSplit(n_splits=1, test_size=(100 - split_size) / 100, random_state=42)
         train_index, test_index = next(stratified_splitter.split(x, y))
-        # Use iloc to select the data based on the indices
         X_train, X_test = x.iloc[train_index], x.iloc[test_index]
         y_train, y_test = y.iloc[train_index], y.iloc[test_index]
         return X_train, X_test, y_train, y_test
-     
-    def standardization(self,X_train,X_test):
+
+    def standardization(self, X_train, X_test):
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
         X_train_scaled = pd.DataFrame(X_train_scaled)
-        X_test_scaled=pd.DataFrame(X_test_scaled)
-        print(X_train_scaled)
-        print(X_test_scaled)
-        return (X_train_scaled,X_test_scaled)
+        X_test_scaled = pd.DataFrame(X_test_scaled)
+
+        st.write("X_train_scaled:")
+        st.write(X_train_scaled)
+        st.write("X_test_scaled:")
+        st.write(X_test_scaled)
+
+        return X_train_scaled, X_test_scaled
 
     @classmethod
     def discretize(cls, x, n_bins=5, strategy='uniform'):
-        # Create a KBinsDiscretizer object
         discretizer = KBinsDiscretizer(n_bins=n_bins, encode='ordinal', strategy=strategy)
-        # Discretize the data
         discretized_data = discretizer.fit_transform(x)
-        #Convert the discretized array back to a DataFrame
         discretized_df = pd.DataFrame(discretized_data, columns=x.columns)
         return discretized_df
 
-    def show_data(self, X_train, X_test, x, y):  # Add self as the first parameter
+    def show_data(self, X_train, X_test, x, y):
         st.markdown('**1.2. Data splits**')
         st.write('Training set')
         st.info(X_train.shape)
@@ -97,6 +101,7 @@ class DataPreprocessing:
         st.write('Y variable')
         st.info(y.name)
 
+        
 # Page 1: Data Upload and Preprocessing
 def page_data_preprocessing():
     st.write("# Page 1: Data Upload and Preprocessing")
@@ -165,8 +170,10 @@ with st.sidebar.subheader('2.2. General Parameters'):
 
 
 
+
+
 class Regularizer:
-    def __init__(self,X_train,X_test,y_train,y_test,X_train_scaled,X_test_scaled):
+    def __init__(self, X_train, X_test, y_train, y_test, X_train_scaled, X_test_scaled):
         self.X_train = X_train
         self.X_test = X_test
         self.y_train = y_train
@@ -175,31 +182,32 @@ class Regularizer:
         self.X_test_scaled = X_test_scaled
 
     def lasso(self):
-
-        lasso_cv = LassoCV(alphas=[0.1,.2,.3], cv=10, max_iter=11000)
+        lasso_cv = LassoCV(alphas=[0.1, 0.2, 0.3], cv=10, max_iter=11000)
         lasso_cv.fit(self.X_train, self.y_train)
 
-       # Get the selected alpha (regularization parameter)
         best_alpha = lasso_cv.alpha_
-        print(f"Best alpha: {best_alpha}")
+        st.write(f"Best alpha (Lasso): {best_alpha}")
+
         lasso_model = Lasso(alpha=best_alpha)
         lasso_model.fit(self.X_train_scaled, self.y_train)
         coefficients = lasso_model.coef_
-        print(coefficients)
+
         X_train_lasso = self.X_train_scaled * coefficients
-        print(X_train_lasso)
         X_test_lasso = self.X_test_scaled * coefficients
-        print(X_test_lasso)
-        return (X_train_lasso, X_test_lasso,coefficients)
+
+        st.write("X_train_lasso:")
+        st.write(X_train_lasso)
+        st.write("X_test_lasso:")
+        st.write(X_test_lasso)
+
+        return X_train_lasso, X_test_lasso, coefficients
 
     def ridge(self):
-
         ridge_cv = RidgeCV(alphas=[0.1, 1.0, 10.0], cv=10)
-        ridge_cv.fit(X_train_scaled, y_train)
+        ridge_cv.fit(self.X_train_scaled, self.y_train)
 
-        # Get the selected alpha (regularization parameter)
         ridge_best_alpha = ridge_cv.alpha_
-        print(f"Best alpha: {ridge_best_alpha}")
+        st.write(f"Best alpha (Ridge): {ridge_best_alpha}")
 
         ridge_model = Ridge(alpha=ridge_best_alpha)
         ridge_model.fit(self.X_train_scaled, self.y_train)
@@ -207,73 +215,57 @@ class Regularizer:
 
         X_train_ridge = self.X_train_scaled * coefficients
         X_test_ridge = self.X_test_scaled * coefficients
-        print(X_train_ridge)
-        print(X_test_ridge)
-        return (X_train_ridge, X_test_ridge)
 
+        st.write("X_train_ridge:")
+        st.write(X_train_ridge)
+        st.write("X_test_ridge:")
+        st.write(X_test_ridge)
+
+        return X_train_ridge, X_test_ridge
 
     def pls(self, n_components=7):
         pls_model = PLSRegression(n_components=n_components)
-
-        # Fit the PLS model
         pls_model.fit(self.X_train_scaled, self.y_train)
 
-        # Transform the data using the fitted PLS model
         X_train_pls = pls_model.transform(self.X_train_scaled)
         X_test_pls = pls_model.transform(self.X_test_scaled)
 
-        # Impute missing values in the transformed data
         imputer = SimpleImputer(strategy='mean')
         X_train_pls_imputed = imputer.fit_transform(X_train_pls)
         X_test_pls_imputed = imputer.transform(X_test_pls)
 
-        # Convert back to DataFrames
         train_feature_pls = pd.DataFrame(X_train_pls_imputed)
         test_feature_pls = pd.DataFrame(X_test_pls_imputed)
 
+        st.write("train_feature_pls:")
+        st.write(train_feature_pls)
+        st.write("test_feature_pls:")
+        st.write(test_feature_pls)
         return train_feature_pls, test_feature_pls
-
-
-
-    def select_features(self, lasso_features):
-        selected_columns = self.X_train.columns[lasso_features]
-        X_train_selected = self.X_train[selected_columns]
-        X_test_selected = self.X_test[selected_columns]
-        return X_train_selected, X_test_selected
-
 
     @classmethod
     def discretize(cls, x, n_bins=5, strategy='uniform'):
-        # Create a KBinsDiscretizer object
         discretizer = KBinsDiscretizer(n_bins=n_bins, encode='ordinal', strategy=strategy)
-        # Discretize the data
         discretized_data = discretizer.fit_transform(x)
-        #Convert the discretized array back to a DataFrame
         discretized_df = pd.DataFrame(discretized_data, columns=x.columns)
         return discretized_df
 
-
     def mutual_information(self, components=7):
-        # Discretize data using the discretize method
         X_train_discretized = self.discretize(self.X_train_scaled)
         X_test_discretized = self.discretize(self.X_test_scaled)
 
-        # Compute mutual information scores
         mi_scores = mutual_info_classif(X_train_discretized, self.y_train)
-
-        # Convert the NumPy array to a Pandas Series
         mi_series = pd.Series(mi_scores, index=X_train_discretized.columns)
-
-        # Sort mutual information scores in descending order
         mi_sorted = mi_series.sort_values(ascending=False)
-
-        # Select the top 'components' features
         selected_features = mi_sorted.head(components).index
 
-        # Get the selected features from the original X_train and X_test
         X_selected_train = self.X_train[selected_features]
         X_selected_test = self.X_test[selected_features]
 
+        st.write("Selected features based on Mutual Information:")
+        st.write(X_selected_train)
+        st.write("Selected features based on Mutual Information:")
+        st.write(X_selected_test)
         return X_selected_train, X_selected_test
 
 
@@ -488,8 +480,12 @@ def page_run_regularizers():
         st.write("## Running PLS Regularizer")
         pls_model = Regularizer(X_train, X_test, y_train, y_test, X_train_scaled, X_test_scaled)
         train_feature_pls, test_feature_pls = pls_model.pls()
-        print(type(train_feature_pls))
-        print(type(test_feature_pls))
+        
+    elif regularizer_option == 'Mutual Information':
+        st.write("## Running MI Regularizer")
+        mi_model = Regularizer(X_train, X_test, y_train, y_test, X_train_scaled, X_test_scaled)
+        X_selected_train, X_selected_test = mi_model.mutual_information(4)
+        
     # clf = Classifier(train_feature_pls, test_feature_pls, y_train, y_test)
 
     # models_to_cross_validate = [
@@ -523,6 +519,7 @@ def main():
    
     if page == "Data Preprocessing":
         page_data_preprocessing()
+        
     elif page == "Run Regularizers":
         page_run_regularizers()
 
