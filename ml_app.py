@@ -104,6 +104,7 @@ class DataPreprocessing:
         
 # Page 1: Data Upload and Preprocessing
 def page_data_preprocessing():
+    st.write("# A Comparative Analysis of Diverse Machine Learning Techniques in  Intrusion Detection Datasets")
     st.write("# Page 1: Data Upload and Preprocessing")
 
     uploaded_file = st.file_uploader("Upload your input CSV file", type=["csv"])
@@ -391,6 +392,9 @@ class Classifier:
         result_dict = {'Accuracy': accuracy, 'Precision': precision, 'Recall': recall, 'f-score': f1_measure, 'ROC-AUC': roc_auc}
         return result_dict
 
+
+
+
 # Page 2: Run Regularizers
 def page_run_regularizers():
     st.write("# Page 2: Run Regularizers")
@@ -481,7 +485,7 @@ def page_run_regularizers():
     elif regularizer_option == 'Mutual Information':
         st.write("## Running MI Regularizer")
         mi_model = Regularizer(X_train, X_test, y_train, y_test, X_train_scaled, X_test_scaled)
-        X_selected_train, X_selected_test = mi_model.mutual_information(4)
+        X_selected_train, X_selected_test = mi_model.mutual_information()
         
     # clf = Classifier(train_feature_pls, test_feature_pls, y_train, y_test)
 
@@ -516,7 +520,7 @@ def main():
    
     if page == "Data Preprocessing":
         page_data_preprocessing()
-        
+
     elif page == "Run Regularizers":
         page_run_regularizers()
 
