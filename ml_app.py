@@ -391,9 +391,6 @@ class Classifier:
         result_dict = {'Accuracy': accuracy, 'Precision': precision, 'Recall': recall, 'f-score': f1_measure, 'ROC-AUC': roc_auc}
         return result_dict
 
-
-
-
 # Page 2: Run Regularizers
 def page_run_regularizers():
     st.write("# Page 2: Run Regularizers")
