@@ -6,7 +6,6 @@ from sklearn.linear_model import LassoCV
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-
 import streamlit as st
 import pandas as pd
 from sklearn.linear_model import Lasso, LassoCV, Ridge, RidgeCV
