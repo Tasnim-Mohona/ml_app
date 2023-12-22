@@ -6,8 +6,8 @@ from sklearn.linear_model import LassoCV
 import numpy as np
 import pandas as pd
 from sklearn.model_selection import train_test_split
-import streamlit as st
-import pandas as pd
+
+
 from sklearn.linear_model import Lasso, LassoCV, Ridge, RidgeCV
 from sklearn.cross_decomposition import PLSRegression
 from sklearn.impute import SimpleImputer
@@ -41,6 +41,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.metrics import precision_score, recall_score, accuracy_score, f1_score
+import plotly.express as px
+
 
 st.set_page_config(layout="wide")
 
@@ -60,10 +62,12 @@ class DataPreprocessing:
         return x, y
 
     def split(self, x, y, split_size=80):
-        stratified_splitter = StratifiedShuffleSplit(n_splits=1, test_size=(100 - split_size) / 100, random_state=42)
-        train_index, test_index = next(stratified_splitter.split(x, y))
-        X_train, X_test = x.iloc[train_index], x.iloc[test_index]
-        y_train, y_test = y.iloc[train_index], y.iloc[test_index]
+       
+        X_train, X_test, y_train, y_test = train_test_split(x, y, test_size=(100 - split_size), random_state=42, stratify=y, shuffle=True)
+        # stratified_splitter = StratifiedShuffleSplit(n_splits=1, test_size=(100 - split_size) / 100, random_state=42) 
+        # train_index, test_index = next(stratified_splitter.split(x, y))
+        # X_train, X_test = x.iloc[train_index], x.iloc[test_index]
+        # y_train, y_test = y.iloc[train_index], y.iloc[test_index]
         return X_train, X_test, y_train, y_test
 
     def standardization(self, X_train, X_test):
@@ -131,45 +135,25 @@ def page_data_preprocessing():
 
     else:
         st.info('Awaiting for CSV file to be uploaded.')
-    # if st.button('Press to use Example Dataset'):
-    #     # Boston housing dataset
-    #     boston = datasets.load_boston()
-    #     # boston = load_boston()
-    #     X = pd.DataFrame(boston.data, columns=boston.feature_names)
-    #     Y = pd.Series(boston.target, name='response')
-    #     df = pd.concat( [X,Y], axis=1 )
-    #     st.markdown('The Boston housing dataset is used as the example.')
-    #     st.write(df.head(5))
-        # Your data preprocessing logic goes here
+        if st.button('Press to use Example Dataset'):
+        # Boston housing dataset
+            boston = load_boston()
+            X = pd.DataFrame(boston.data, columns=boston.feature_names)
+            Y = pd.Series(boston.target, name='response')
+            df = pd.concat( [X,Y], axis=1 )
 
-
-# Sidebar - Specify parameter settings
-#---------------------------------#
-# Sidebar - Collects user input features into dataframe
-with st.sidebar.header('1. Upload your CSV data'):
-    #uploaded_file = st.sidebar.file_uploader("Upload your input CSV file", type=["csv"])
-    st.sidebar.markdown("""
-    [Example CSV input file](https://raw.githubusercontent.com/dataprofessor/data/master/delaney_solubility_with_descriptors.csv)
-    """)
-
-with st.sidebar.header('2. Set Parameters'):
-    split_size = st.sidebar.slider('Data split ratio (% for Training Set)', 10, 90, 80, 5)
-
-with st.sidebar.subheader('2.1. Learning Parameters'):
-    parameter_n_estimators = st.sidebar.slider('Number of estimators (n_estimators)', 0, 1000, 100, 100)
-    parameter_max_features = st.sidebar.select_slider('Max features (max_features)', options=['auto', 'sqrt', 'log2'])
-    parameter_min_samples_split = st.sidebar.slider('Minimum number of samples required to split an internal node (min_samples_split)', 1, 10, 2, 1)
-    parameter_min_samples_leaf = st.sidebar.slider('Minimum number of samples required to be at a leaf node (min_samples_leaf)', 1, 10, 2, 1)
-
-with st.sidebar.subheader('2.2. General Parameters'):
-    parameter_random_state = st.sidebar.slider('Seed number (random_state)', 0, 1000, 42, 1)
-    parameter_criterion = st.sidebar.select_slider('Performance measure (criterion)', options=['mse', 'mae'])
-    parameter_bootstrap = st.sidebar.select_slider('Bootstrap samples when building trees (bootstrap)', options=[True, False])
-    parameter_oob_score = st.sidebar.select_slider('Whether to use out-of-bag samples to estimate the R^2 on unseen data (oob_score)', options=[False, True])
-    parameter_n_jobs = st.sidebar.select_slider('Number of jobs to run in parallel (n_jobs)', options=[1, -1])
-
-
-
+            st.markdown('The Boston housing dataset is used as the example.')
+            st.write(df.head(5))
+            df = pd.read_csv(uploaded_file)
+            st.write("## View of dataset")
+            st.write(df.head())
+            #DATA PREPROCESSING
+            new_obj = DataPreprocessing(df)
+            x, y = new_obj.read_data()
+            X_train, X_test, y_train, y_test = new_obj.split(x, y)
+            # new_obj.cross_validate()  # Add parentheses to invoke the method
+            new_obj.show_data(X_train, X_test, x, y)  # Add parentheses to invoke the method
+            X_train_scaled, X_test_scaled = new_obj.standardization(X_train, X_test)
 
 
 class Regularizer:
@@ -250,26 +234,30 @@ class Regularizer:
         discretized_df = pd.DataFrame(discretized_data, columns=x.columns)
         return discretized_df
 
-    def mutual_information(self, components=7):
+
+    def mutual_information(self, components):
+        # Discretize data using the discretize method
         X_train_discretized = self.discretize(self.X_train_scaled)
         X_test_discretized = self.discretize(self.X_test_scaled)
 
+        # Compute mutual information scores
         mi_scores = mutual_info_classif(X_train_discretized, self.y_train)
-        mi_series = pd.Series(mi_scores, index=X_train_discretized.columns)
+
+        # Convert the NumPy array to a Pandas Series
+        mi_series = pd.Series(mi_scores)
+
+        # Sort mutual information scores in descending order
         mi_sorted = mi_series.sort_values(ascending=False)
-        selected_features = mi_sorted.head(components).index
 
-        X_selected_train = self.X_train[selected_features]
-        X_selected_test = self.X_test[selected_features]
+        # Select the top 'components' features
+        selected_features = mi_sorted.head(components).index.tolist()
+        
 
-        st.write("Selected features based on Mutual Information:")
-        st.write(X_selected_train)
-        st.write("Selected features based on Mutual Information:")
-        st.write(X_selected_test)
+        # Get the selected features from the original X_train and X_test
+        X_selected_train = self.X_train[selected_features].copy()
+        X_selected_test = self.X_test[selected_features].copy()
+
         return X_selected_train, X_selected_test
-
-
-
 
 class Classifier:
     def __init__(self, X_train, X_test, y_train, y_test):
@@ -277,62 +265,60 @@ class Classifier:
         self.X_test = X_test
         self.y_train = y_train
         self.y_test = y_test
-    def cross_validate_models(self, X, y, models, cv=StratifiedKFold(n_splits=5, shuffle=True, random_state=42)):
+    def cross_validate_models(self, X, y, models, cv=StratifiedKFold(n_splits=2, shuffle=True, random_state=42)):
         scores_dict = {}
-
         for model_name, model in models:
             scores = cross_val_score(model, X, y, cv=cv, scoring='accuracy')
             scores_dict[model_name] = scores
-
         scores_df = pd.DataFrame(scores_dict)
         return scores_df
-    def plot_radar(self, results_df, title_suffix=""):
-        categories = list(results_df.columns)
-        models = results_df.index
-        num_models = len(models)
-
-        angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
-        values = results_df.values.T
-
-        values = np.concatenate((values, [values[:, 0]]), axis=1)
-        angles += angles[:1]
-
-        plt.figure(figsize=(8, 8))
-        ax = plt.subplot(111, polar=True)
-
-        for i in range(num_models):
-            ax.plot(angles, values[:, i], label=models[i])
-
-        ax.fill(angles, values.mean(axis=1), color='red', alpha=0.25)
-        ax.set_yticklabels([])
-        plt.title('Radar Plot - {}'.format(title_suffix))
-        plt.legend(loc="upper right")
-        plt.show()
-
+###NEW plot_roc_auc
+   
     def plot_roc_auc(self, model, probabilities, title_suffix=""):
         roc_auc = roc_auc_score(self.y_test, probabilities)
+
         # ROC curve and AUC plot
         fpr, tpr, thresholds = roc_curve(self.y_test, probabilities)
-        plt.figure(figsize=(8, 8))
-        plt.plot(fpr, tpr, color='darkorange', lw=2, label='ROC curve (area = {:.2f})'.format(roc_auc))
-        plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
-        plt.xlabel('False Positive Rate')
-        plt.ylabel('True Positive Rate')
-        plt.title('Receiver Operating Characteristic (ROC) - {}'.format(title_suffix))
-        plt.legend(loc="lower right")
-        plt.show()
+        
+        fig = px.line(x=fpr, y=tpr, labels={'x': 'False Positive Rate', 'y': 'True Positive Rate'},
+                    title='Receiver Operating Characteristic (ROC) - {}'.format(title_suffix))
+
+        # Add ROC curve
+        fig.add_scatter(x=[0, 1], y=[0, 1], mode='lines', line=dict(color='navy', width=2, dash='dash'),
+                        name='Random', showlegend=False)
+
+        # Add AUC value as an annotation
+        fig.add_annotation(x=0.5, y=0.5, text='AUC = {:.2f}'.format(roc_auc),
+                        showarrow=False, font=dict(size=12, color='black'))
+
+        # Show legend
+        fig.update_layout(legend=dict(x=1, y=0, traceorder='normal', orientation='h'))
+
+        # Display the plot using Streamlit
+        st.plotly_chart(fig)
+        st.title('Receiver Operating Characteristic (ROC) - {}'.format(title_suffix))
 
         return roc_auc
 
-    def plot_scatter(self, results_dict, title_suffix=""):
-        categories = list(results_dict.keys())
-        values = list(results_dict.values())
-        plt.figure(figsize=(8, 6))
-        plt.scatter(categories, values, color='blue')
-        plt.title('Scatter Plot - {}'.format(title_suffix))
-        plt.xlabel('Metrics')
-        plt.ylabel('Values')
-        plt.show()
+# ###RUNNING plot_roc_auc
+#     def plot_roc_auc(self, model, probabilities, title_suffix=""):
+#         roc_auc = roc_auc_score(self.y_test, probabilities)
+#         fpr, tpr, thresholds = roc_curve(self.y_test, probabilities)
+
+#         # Create a DataFrame for better display in Streamlit
+#         roc_data = pd.DataFrame({'False Positive Rate': fpr, 'True Positive Rate': tpr, 'Thresholds': thresholds})
+#         st.title('Receiver Operating Characteristic (ROC) - {}'.format(title_suffix))
+#         # Plot ROC curve using Plotly
+#         fig = px.line(roc_data, x='False Positive Rate', y='True Positive Rate', labels={'False Positive Rate': 'False Positive Rate', 'True Positive Rate': 'True Positive Rate'},
+#                     title='Receiver Operating Characteristic (ROC) - {}'.format(title_suffix))
+#         # Add AUC information to the legend
+#         auc_label = 'AUC = {:.2f}'.format(roc_auc)
+#         fig.add_shape(type='line', line=dict(dash='dash'), x0=0, x1=1, y0=0, y1=1)
+#         fig.add_annotation(x=0.5, y=0.5, text=auc_label, showarrow=False, font=dict(color='black'))
+#         # Display the plot using Streamlit
+        
+#         st.plotly_chart(fig)
+#         return roc_auc
 
     def knn(self):
         knn_classifier = KNeighborsClassifier(n_neighbors=3)
@@ -393,6 +379,91 @@ class Classifier:
 
 
 
+    def plot_cross_val_boxplot(self, models, cv=StratifiedKFold(n_splits=2, shuffle=True, random_state=42)):
+        cross_val_scores = self.cross_validate_models(self.X_train, self.y_train, models, cv=cv)
+
+        # Transpose the labels
+        labels = cross_val_scores.columns
+        # Transpose the values
+        values = [cross_val_scores[label].values for label in labels]
+
+        # Flatten the list of arrays (values)
+        flattened_values = np.concatenate(values)
+        st.title('Cross-Validated Box Plot of Accuracy')
+        # Create a box plot of the cross-validation scores using Plotly Express
+        fig = px.box(x=np.repeat(labels, len(cross_val_scores)), y=flattened_values,
+                    labels={'x': 'Model', 'y': 'Accuracy'}, title='Cross-Validation Box Plot')
+
+        # Customize box plot appearance (change color to darkorange)
+        for trace in fig.data:
+            trace.marker.line.color = 'darkorange'
+            trace.marker.line.width = 2
+
+        # Add a horizontal line at y=0.5 for reference (you can customize this)
+        fig.add_shape(type='line', x0=-1, x1=len(labels), y0=0.5, y1=0.5,
+                    line=dict(color='navy', width=2, dash='dash'))
+
+        # Display the plot using Streamlit
+        st.plotly_chart(fig)
+        
+
+#####RUNNING BOX
+    # def plot_cross_val_boxplot(self, models, cv=StratifiedKFold(n_splits=2, shuffle=True, random_state=42)):
+    #     cross_val_scores = self.cross_validate_models(self.X_train, self.y_train, models, cv=cv)
+
+    #     # Transpose the labels
+    #     labels = cross_val_scores.columns
+    #     # Transpose the values
+    #     values = [cross_val_scores[label].values for label in labels]
+
+    #     # Create a box plot of the cross-validation scores
+    #     fig, ax = plt.subplots(figsize=(10, 6))
+    #     ax.boxplot(values, labels=labels)
+    #     ax.set_title('Cross-Validation Box Plot')
+    #     ax.set_ylabel('Accuracy')
+
+    #     # Display the plot using Streamlit
+    #     st.pyplot(fig)
+    #     st.title('Cross-Validation Box Plot')
+
+
+    def plot_radar(self, results_df, title_suffix=""):
+        categories = list(results_df.columns)
+        models = results_df.index
+        num_models = len(models)
+
+        angles = np.linspace(0, 2 * np.pi, len(categories), endpoint=False).tolist()
+        values = results_df.values.T
+
+        values = np.concatenate((values, [values[:, 0]]), axis=1)
+        angles += angles[:1]
+
+        # Create a DataFrame for better display in Streamlit
+        radar_data = pd.DataFrame(values, columns=categories, index=models)
+
+        # Plot radar chart using Streamlit
+        st.write("## Radar Plot - {}".format(title_suffix))
+        st.line_chart(radar_data, use_container_width=True)
+        st.plotly_chart(plt.figure(figsize=(8, 8)))  # Use plotly_chart to render the Matplotlib figure
+        st.title('Radar Plot - {}'.format(title_suffix))
+        st.legend(loc="upper right")
+
+
+
+    def plot_scatter(self, results_dict, title_suffix=""):
+        categories = list(results_dict.keys())
+        values = list(results_dict.values())
+
+        # Create a DataFrame for better display in Streamlit
+        scatter_data = pd.DataFrame({'Metrics': categories, 'Values': values})
+
+        # Scatter plot using Streamlit
+        st.write("## Scatter Plot - {}".format(title_suffix))
+        st.write(scatter_data.set_index('Metrics').plot(kind='scatter', x='Metrics', y='Values', color='blue', figsize=(8, 6)))
+        st.xlabel('Metrics')
+        st.ylabel('Values')
+
+
 
 # Page 2: Run Regularizers
 def page_run_regularizers():
@@ -412,22 +483,20 @@ def page_run_regularizers():
     X_test_scaled = st.session_state.data_processed['X_test_scaled']
 
     # Regularizer option
-    regularizer_option = st.selectbox('Select Regularizer', ['Lasso', 'Ridge', 'PLS','Mutual Information'])
+    regularizer_option = st.selectbox('Select Regularizer', ['Select','Lasso', 'Ridge', 'PLS','Mutual Information'])
 
     if regularizer_option == 'Lasso':
         st.write("## Running Lasso Regularizer")
-        lasso_model = Regularizer(X_train, X_test, y_train, y_test, X_train_scaled, X_test_scaled)  
+        lasso_model = Regularizer(X_train, X_test, y_train, y_test, X_train_scaled, X_test_scaled)
         train_feature_lasso, test_feature_lasso, coefficients = lasso_model.lasso()
-           
+
         # Total number of non-zero columns
         total_non_zero_train = (coefficients != 0).sum()
 
         st.write("\nTotal number of non-zero columns for training data:", total_non_zero_train)
-        components = total_non_zero_train
-        st.write("Number of components:", components)
 
         # Display Lasso features
-        lasso_features=train_feature_lasso.iloc[:,coefficients!=0]
+        lasso_features = train_feature_lasso.iloc[:, coefficients != 0]
         st.write("Lasso Features:")
         st.write(lasso_features)
 
@@ -440,34 +509,55 @@ def page_run_regularizers():
         st.markdown('**3.3. Lasso Features/Variable Details**:')
         st.write('Lasso Regularized Variables')
         st.info(list(lasso_features.columns))
-        # st.write('Y variable')
-        # st.info(y.name)
-        # # Perform further operations...
-        # clf = Classifier(train_feature_lasso,test_feature_lasso,y_train, y_test)
 
-        # models_to_cross_validate = [
-        #     ('KNN', KNeighborsClassifier(n_neighbors=3)),
-        #     ('SVM', SVC(probability=True)),
-        #     ('LDA', LinearDiscriminantAnalysis()),
-        #     ('Decision Tree', DecisionTreeClassifier())
-        # ]
-        # cross_val_scores = clf.cross_validate_models(train_feature_lasso, y_train, models_to_cross_validate)
-        
-        # # # Display Cross-Validation Box Plot
-        # boxplot_figure, boxplot_ax = plt.subplots()
-        # boxplot_ax.boxplot(cross_val_scores.values, labels=cross_val_scores.keys())
-        # boxplot_ax.set_title('Cross-Validation Box Plot using Lasso Regression')
-        # boxplot_ax.set_ylabel('Accuracy')
-        # st.pyplot(boxplot_figure)
+        # Evaluate classifiers
+        st.write("## Classifier Evaluation on Lasso Regularized Data")
 
-        # # ROC-AUC plot for each model
-        # for model_name, model in models_to_cross_validate:
-        #     roc_auc_figure, roc_auc_ax = plt.subplots(figsize=(8, 8))
-        #     probabilities = model.fit(clf.X_train, clf.y_train).predict_proba(clf.X_test)[:, 1]
-        #     clf.plot_roc_auc(model, probabilities, title_suffix=f'{model_name} - ROC-AUC')
-        #     roc_auc_ax.set_title(f'{model_name} - ROC-AUC')
-        #     st.pyplot(roc_auc_figure)
-        # # Perform further operations as needed...
+        # Choose classifiers
+        classifiers = st.multiselect('Select Classifiers to Evaluate', ['KNN', 'SVM', 'LDA', 'Decision Tree'])
+
+        # Evaluate selected classifiers
+        for classifier_name in classifiers:
+            st.subheader(f"{classifier_name} Classification")
+            classifier = Classifier(train_feature_lasso, test_feature_lasso, y_train, y_test)
+
+            if classifier_name == 'KNN':
+                result_dict = classifier.knn()
+            elif classifier_name == 'SVM':
+                result_dict = classifier.svm()
+            elif classifier_name == 'LDA':
+                result_dict = classifier.lda()
+            elif classifier_name == 'Decision Tree':
+                result_dict = classifier.decision_tree()
+            st.title('Evaluation Metrics - {}'.format(classifier_name))
+            st.write(result_dict)
+            # JUPYTER X and y are your features and target variable, respectively
+            clf = Classifier(train_feature_lasso,test_feature_lasso,y_train, y_test)
+
+            models_to_cross_validate = [
+                ('KNN',KNeighborsClassifier(n_neighbors=3)),
+                ('SVM', SVC(probability=True)),
+                ('LDA', LinearDiscriminantAnalysis()),
+                ('Decision Tree', DecisionTreeClassifier())
+            ]
+
+            # Perform cross-validation and get scores
+            cross_val_scores = clf.cross_validate_models(train_feature_lasso, y_train, models_to_cross_validate)
+
+            # Plot cross-validation box plot
+            clf.plot_cross_val_boxplot(models_to_cross_validate)
+            # # Assuming you have instances of your Classifier class named knn, lda, decision_tree
+            # svm = Classifier(train_feature_lasso,test_feature_lasso,y_train, y_test)
+            # knn = Classifier(train_feature_lasso,test_feature_lasso,y_train, y_test)
+            # lda = Classifier(train_feature_lasso,test_feature_lasso,y_train, y_test)
+            # decision_tree = Classifier(train_feature_lasso,test_feature_lasso,y_train, y_test)
+            # svm.svm()
+            
+            # # # Display Box Plot for Cross-Validation
+            # # st.write(f"### {classifier_name} Cross-Validation Box Plot")
+            # # models = [(classifier_name, getattr(classifier, f"{classifier_name.lower()}"))]
+            # classifier.plot_cross_val_boxplot(models)
+
 
     elif regularizer_option == 'Ridge':
         st.write("## Running Ridge Regularizer")
@@ -475,17 +565,76 @@ def page_run_regularizers():
         train_feature_ridge, test_feature_ridge = ridge_model.ridge()
 
         # Perform further operations as needed...
+        # Evaluate classifiers
+        st.write("## Classifier Evaluation on Ridge Regularized Data")
+        
+        # Choose classifiers
+        classifiers = st.multiselect('Select Classifiers to Evaluate', ['KNN', 'SVM', 'LDA', 'Decision Tree'])
+
+        # Evaluate selected classifiers
+        for classifier_name in classifiers:
+            st.subheader(f"{classifier_name} Classification")
+            classifier = Classifier(train_feature_ridge, test_feature_ridge, y_train, y_test)
+
+            if classifier_name == 'KNN':
+                result_dict = classifier.knn()
+            elif classifier_name == 'SVM':
+                result_dict = classifier.svm()
+            elif classifier_name == 'LDA':
+                result_dict = classifier.lda()
+            elif classifier_name == 'Decision Tree':
+                result_dict = classifier.decision_tree()
+            st.title('Evaluation Metrics - {}'.format(classifier_name))
+            st.write(result_dict)
+            # Assuming you have instances of your Classifier class named knn, lda, decision_tree
+            svm = Classifier(train_feature_ridge, test_feature_ridge,y_train, y_test)
+            knn = Classifier(train_feature_ridge, test_feature_ridge,y_train, y_test)
+            lda = Classifier(train_feature_ridge, test_feature_ridge,y_train, y_test)
+            decision_tree = Classifier(train_feature_ridge, test_feature_ridge,y_train, y_test)
 
     elif regularizer_option == 'PLS':
         st.write("## Running PLS Regularizer")
         pls_model = Regularizer(X_train, X_test, y_train, y_test, X_train_scaled, X_test_scaled)
         train_feature_pls, test_feature_pls = pls_model.pls()
         
+        # Choose classifiers
+        classifiers = st.multiselect('Select Classifiers to Evaluate', ['KNN', 'SVM', 'LDA', 'Decision Tree'])
+
+        # Evaluate selected classifiers
+        for classifier_name in classifiers:
+            st.subheader(f"{classifier_name} Classification")
+            classifier = Classifier(train_feature_pls, test_feature_pls, y_train, y_test)
+
+            if classifier_name == 'KNN':
+                result_dict = classifier.knn()
+            elif classifier_name == 'SVM':
+                result_dict = classifier.svm()
+            elif classifier_name == 'LDA':
+                result_dict = classifier.lda()
+            elif classifier_name == 'Decision Tree':
+                result_dict = classifier.decision_tree()
+            st.title('Evaluation Metrics - {}'.format(classifier_name))
+            st.write(result_dict)
+            # Assuming you have instances of your Classifier class named knn, lda, decision_tree
+            svm = Classifier(train_feature_pls, test_feature_pls,y_train, y_test)
+            knn = Classifier(train_feature_pls, test_feature_pls,y_train, y_test)
+            lda = Classifier(train_feature_pls, test_feature_pls,y_train, y_test)
+            decision_tree = Classifier(train_feature_pls, test_feature_pls,y_train, y_test)
+    
+
+
+
+
+
+
+
     elif regularizer_option == 'Mutual Information':
         st.write("## Running MI Regularizer")
         mi_model = Regularizer(X_train, X_test, y_train, y_test, X_train_scaled, X_test_scaled)
-        X_selected_train, X_selected_test = mi_model.mutual_information()
+        X_selected_train, X_selected_test = mi_model.mutual_information(components=6)
         
+
+
     # clf = Classifier(train_feature_pls, test_feature_pls, y_train, y_test)
 
     # models_to_cross_validate = [
@@ -516,7 +665,8 @@ def page_run_regularizers():
 def main():
     st.sidebar.title("Navigation")
     page = st.sidebar.radio("Go to", ["Data Preprocessing", "Run Regularizers"])
-   
+    # Sidebar - Specify parameter settings
+
     if page == "Data Preprocessing":
         page_data_preprocessing()
 
